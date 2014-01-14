@@ -12,7 +12,6 @@ import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
-import android.widget.TextView;
 
 import com.acs.smartcard.Reader;
 import com.acs.smartcard.Reader.OnStateChangeListener;
@@ -29,17 +28,15 @@ public class MainActivity extends Activity {
 	private Reader mReader;
 	private PendingIntent mPermissionIntent;
 	
-	private TextView tv;
-
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 		
-//		if (BluetoothAdapter.getDefaultAdapter().getAddress().equalsIgnoreCase("88:9b:39:d6:69:3a")) {
-//			Log.e("MainActivity", "this is the emulated tag (csg nexus)");
-//			return;
-//		}
+		if (BluetoothAdapter.getDefaultAdapter().getAddress().equalsIgnoreCase("88:9b:39:d6:69:3a")) {
+			Log.e("MainActivity", "this is the emulated tag (csg nexus)");
+			return;
+		}
 		
 		Log.e("MainActivity", "this is the device with the attached nfc reader (rerg nexus)");
 		
@@ -47,8 +44,6 @@ public class MainActivity extends Activity {
 		 // Get USB manager
         mManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
-        tv = (TextView) findViewById(R.id.txtview);
-        
         // Initialize reader
         mReader = new Reader(mManager);
         mReader.setOnStateChangeListener(new OnStateChangeListener() {
@@ -65,46 +60,61 @@ public class MainActivity extends Activity {
 
                 // Create output string
                 final String outputString = "Slot " + slotNum + ": " + stateStrings[prevState] + " -> " + stateStrings[currState];
-                Log.e(TAG, outputString);
+//                Log.e(TAG, outputString);
                 
                 try {
                 	if (currState == 2) {
             			mReader.power(0, Reader.CARD_COLD_RESET);
-            			Log.e(TAG, "powered");
+//            			Log.e(TAG, "powered");
 //                	} else if (currState == 4) {
-                		mReader.setProtocol(0, Reader.PROTOCOL_T0 | Reader.PROTOCOL_T1);
-                		Log.e(TAG, "protocol set");
+                		mReader.setProtocol(0, Reader.PROTOCOL_T0);
+//                		Log.e(TAG, "protocol set");
                 		int state = mReader.getState(0);
                 		if (state == 5) {
                 			Log.e(TAG, "protocol negotiable");
                 		} else if (state == 6) {
-                			Log.e(TAG, "protocol specific");
-                			byte[] recvBuffer = new byte[4096];
-//                			byte[] sendBuffer = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
-                			byte[] sendBuffer = createSelectAidApdu();
-                			int length = mReader.transmit(0, sendBuffer, sendBuffer.length, recvBuffer, recvBuffer.length);
-                			Log.e(TAG, "transmitted. received "+length+" bytes");
+//                			Log.e(TAG, "protocol specific");
                 			
-                			byte[] result = new byte[length];
-                			System.arraycopy(recvBuffer, 0, result, 0, length);
-                			
-                			StringBuilder builder = new StringBuilder();
-                			for (byte b : result) {
-                				builder.append(b);
-                				builder.append(", ");
+                			for (int i=0; i<1000; i++) {
+                				byte[] recvBuffer = new byte[300];
+                				byte[] sendBuffer = null;
+                				if (i==0) {
+                					sendBuffer = createSelectAidApdu();
+                				} else {
+                					sendBuffer = new byte[1000];
+                					sendBuffer[0] = (byte) i;
+                				}
+                				int length = mReader.transmit(0, sendBuffer, sendBuffer.length, recvBuffer, recvBuffer.length);
+                				
+                				if (length == 0)
+                					Log.e(TAG, "transmitted. received "+length+" bytes");
+                				else
+                					Log.i(TAG, "transmitted. received "+length+" bytes");
+                					
+                				
+                				if (length == 0) {
+                					Log.e(TAG, "length == 0");
+                					mReader.power(0, Reader.CARD_WARM_RESET);
+                					mReader.setProtocol(0, Reader.PROTOCOL_T0);
+                					i = -1;
+                					continue;
+                				}
+                				
+                				StringBuilder builder = new StringBuilder();
+                				for (int x=0; x<length; x++) {
+                					builder.append(recvBuffer[x]);
+                					builder.append(", ");
+                				}
+                				
+                				Log.i(TAG, "received bytes: "+builder.toString());
+                				
+                				byte[] result = new byte[length];
+                				System.arraycopy(recvBuffer, 0, result, 0, length);
+                				
+//                				int k = Integer.parseInt(new String(result));
+//                				Log.i(TAG, "received: "+Integer.toString(k));
                 			}
-                			
-                			Log.e(TAG, builder.toString());
-                			Log.e(TAG, new String(result));
                 		}
-                	} else if (currState == 6) {
-                		Log.e(TAG, "currState == 6");
-                		
-						byte[] recvBuffer = new byte[300];
-						byte[] sendBuffer = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
-						mReader.transmit(0, sendBuffer, sendBuffer.length, recvBuffer, recvBuffer.length);
-						tv.setText(new String(recvBuffer));
-						Log.e(TAG, "transmitted");
                 	}
                 } catch (Exception e) {
                 	Log.e(TAG, "error", e);
