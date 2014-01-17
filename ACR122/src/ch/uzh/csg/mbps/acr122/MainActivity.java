@@ -16,7 +16,7 @@ import android.view.Menu;
 import com.acs.smartcard.Reader;
 import com.acs.smartcard.Reader.OnStateChangeListener;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements ITransceiverCallback {
 	private static final String TAG = "MainActivity";
 	
     private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
@@ -74,47 +74,10 @@ public class MainActivity extends Activity {
                 			Log.e(TAG, "protocol negotiable");
                 		} else if (state == 6) {
 //                			Log.e(TAG, "protocol specific");
-                			
-                			for (int i=0; i<1000; i++) {
-                				byte[] recvBuffer = new byte[300];
-                				byte[] sendBuffer = null;
-                				if (i==0) {
-                					sendBuffer = createSelectAidApdu();
-                				} else {
-                					sendBuffer = new byte[1000];
-                					sendBuffer[0] = (byte) i;
-                				}
-                				int length = mReader.transmit(0, sendBuffer, sendBuffer.length, recvBuffer, recvBuffer.length);
-                				
-                				if (length == 0)
-                					Log.e(TAG, "transmitted. received "+length+" bytes");
-                				else
-                					Log.i(TAG, "transmitted. received "+length+" bytes");
-                					
-                				
-                				if (length == 0) {
-                					Log.e(TAG, "length == 0");
-                					mReader.power(0, Reader.CARD_WARM_RESET);
-                					mReader.setProtocol(0, Reader.PROTOCOL_T0);
-                					i = -1;
-                					continue;
-                				}
-                				
-                				StringBuilder builder = new StringBuilder();
-                				for (int x=0; x<length; x++) {
-                					builder.append(recvBuffer[x]);
-                					builder.append(", ");
-                				}
-                				
-                				Log.i(TAG, "received bytes: "+builder.toString());
-                				
-                				byte[] result = new byte[length];
-                				System.arraycopy(recvBuffer, 0, result, 0, length);
-                				
-//                				int k = Integer.parseInt(new String(result));
-//                				Log.i(TAG, "received: "+Integer.toString(k));
-                			}
+                			startTransmission();
                 		}
+                	} else if (currState == 1) {
+                		cancelTransmission();
                 	}
                 } catch (Exception e) {
                 	Log.e(TAG, "error", e);
@@ -130,6 +93,61 @@ public class MainActivity extends Activity {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         registerReceiver(mReceiver, filter);
+	}
+	
+	private void startTransmission() {
+//		Log.e(TAG, "starting transmission");
+		byte[] sendBuffer = createSelectAidApdu();
+		transmit(sendBuffer);
+	}
+	
+	private void cancelTransmission() {
+//		Log.e(TAG, "canceling transmission");
+		
+	}
+	
+	private int nofMessages = 1;
+	private int totalMessages = 1000;
+	
+	@Override
+	public void onReceived(byte[] bytes) {
+		if (bytes == null) 
+			return;
+		
+		int length = bytes.length;
+		if (length == 0)
+			Log.e(TAG, "received "+length+" bytes");
+		else
+			Log.i(TAG, "received "+length+" bytes");
+			
+		if (length == 0) {
+//			Log.e(TAG, "length == 0");
+//			mReader.power(0, Reader.CARD_WARM_RESET);
+//			mReader.setProtocol(0, Reader.PROTOCOL_T0);
+//			i = -1;
+//			continue;
+		}
+		
+		StringBuilder builder = new StringBuilder();
+		for (int x=0; x<length; x++) {
+			builder.append(bytes[x]);
+			builder.append(", ");
+		}
+		Log.i(TAG, "received bytes: "+builder.toString());
+		
+		if (nofMessages < totalMessages) {
+			byte[] sendBuffer = new byte[100];
+			sendBuffer[0] = (byte) nofMessages;
+			transmit(sendBuffer);
+			nofMessages++;
+		}
+	}
+	
+	private synchronized void transmit(byte[] sendBuffer) {
+		Log.e(TAG, "sending "+sendBuffer.length+" bytes");
+		TransceiveTask task = new TransceiveTask(this, sendBuffer, mReader);
+		Thread t = new Thread(task);
+		t.start();
 	}
 	
 	@Override
