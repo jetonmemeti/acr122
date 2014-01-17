@@ -9,14 +9,16 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 
 import com.acs.smartcard.Reader;
+import com.acs.smartcard.ReaderException;
 import com.acs.smartcard.Reader.OnStateChangeListener;
 
-public class MainActivity extends Activity implements ITransceiverCallback {
+public class MainActivity extends Activity {
 	private static final String TAG = "MainActivity";
 	
     private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
@@ -67,7 +69,7 @@ public class MainActivity extends Activity implements ITransceiverCallback {
             			mReader.power(0, Reader.CARD_COLD_RESET);
 //            			Log.e(TAG, "powered");
 //                	} else if (currState == 4) {
-                		mReader.setProtocol(0, Reader.PROTOCOL_T0);
+                		mReader.setProtocol(0, Reader.PROTOCOL_T0 | Reader.PROTOCOL_T1);
 //                		Log.e(TAG, "protocol set");
                 		int state = mReader.getState(0);
                 		if (state == 5) {
@@ -96,7 +98,7 @@ public class MainActivity extends Activity implements ITransceiverCallback {
 	}
 	
 	private void startTransmission() {
-//		Log.e(TAG, "starting transmission");
+		Log.e(TAG, "starting transmission");
 		byte[] sendBuffer = createSelectAidApdu();
 		transmit(sendBuffer);
 	}
@@ -109,25 +111,19 @@ public class MainActivity extends Activity implements ITransceiverCallback {
 	private int nofMessages = 1;
 	private int totalMessages = 1000;
 	
-	@Override
 	public void onReceived(byte[] bytes) {
 		if (bytes == null) 
 			return;
 		
 		int length = bytes.length;
-		if (length == 0)
-			Log.e(TAG, "received "+length+" bytes");
-		else
-			Log.i(TAG, "received "+length+" bytes");
-			
 		if (length == 0) {
+			Log.e(TAG, "received "+length+" bytes");
 //			Log.e(TAG, "length == 0");
 //			mReader.power(0, Reader.CARD_WARM_RESET);
 //			mReader.setProtocol(0, Reader.PROTOCOL_T0);
-//			i = -1;
-//			continue;
-		}
-		
+		} else
+			Log.i(TAG, "received "+length+" bytes");
+			
 		StringBuilder builder = new StringBuilder();
 		for (int x=0; x<length; x++) {
 			builder.append(bytes[x]);
@@ -136,8 +132,10 @@ public class MainActivity extends Activity implements ITransceiverCallback {
 		Log.i(TAG, "received bytes: "+builder.toString());
 		
 		if (nofMessages < totalMessages) {
-			byte[] sendBuffer = new byte[100];
-			sendBuffer[0] = (byte) nofMessages;
+			byte[] sendBuffer = new byte[50];
+			for (int i=0; i<50; i++) {
+				sendBuffer[i] = 0x01;
+			}
 			transmit(sendBuffer);
 			nofMessages++;
 		}
@@ -145,9 +143,9 @@ public class MainActivity extends Activity implements ITransceiverCallback {
 	
 	private synchronized void transmit(byte[] sendBuffer) {
 		Log.e(TAG, "sending "+sendBuffer.length+" bytes");
-		TransceiveTask task = new TransceiveTask(this, sendBuffer, mReader);
-		Thread t = new Thread(task);
-		t.start();
+		TransmitParams params = new TransmitParams();
+		params.bytes = sendBuffer;
+		new TransmitTask().execute(params);
 	}
 	
 	@Override
@@ -217,5 +215,29 @@ public class MainActivity extends Activity implements ITransceiverCallback {
             }
         }
     };
+    
+    private class TransmitParams {
+    	private byte[] bytes;
+    }
+    
+    private class TransmitTask extends AsyncTask<TransmitParams, Void, Void> {
+
+		@Override
+		protected Void doInBackground(TransmitParams... params) {
+			byte[] result;
+			try {
+				byte[] recvBuffer = new byte[270];
+				int length = mReader.transmit(0, params[0].bytes, params[0].bytes.length, recvBuffer, recvBuffer.length);
+				result = new byte[length];
+				System.arraycopy(recvBuffer, 0, result, 0, length);
+			} catch (ReaderException e) {
+				Log.e("TransceiveTask", "reader exception!", e);
+				result = null;
+			}
+			onReceived(result);
+			return null;
+		}
+    	
+    }
     
 }

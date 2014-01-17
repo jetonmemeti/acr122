@@ -28,17 +28,24 @@ public class MyHostApduService extends HostApduService {
 	}
 
 	private byte[] getNextMessage() {
-		messageCounter++;
-		byte[] bytes = null;
-		for (int i=0; i<messageCounter; i++) {
-			if (i==0) {
-				bytes = new byte[messageCounter];
-			}
-			bytes[i] = (byte) i;
-		}
-		
-		return bytes;
+//		messageCounter++;
+//		byte[] bytes = null;
+//		for (int i=0; i<messageCounter; i++) {
+//			if (i==0) {
+//				bytes = new byte[messageCounter];
+//			}
+//			bytes[i] = (byte) i;
+//		}
+//		
+//		return bytes;
 //		return STRINGS[messageCounter-1].getBytes();
+		
+		messageCounter++;
+		byte[] bytes = new byte[100];
+		for (int i=0; i<100; i++) {
+			bytes[i] = 0x01;
+		}
+		return bytes;
 	}
 
 	private boolean selectAidApdu(byte[] apdu) {
